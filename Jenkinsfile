@@ -2,13 +2,12 @@ pipeline {
     agent none
 
     environment {
-        IMAGE     = "${env.BRANCH_NAME == 'main' ? 'nodemain:v1.0' : 'nodedev:v1.0'}"
-        CONTAINER = "${env.BRANCH_NAME == 'main' ? 'nodemain'      : 'nodedev'}"
-        HOST_PORT = "${env.BRANCH_NAME == 'main' ? '3000'          : '3001'}"
+        IMAGE     = "${env.BRANCH_NAME == 'main' ? 'ultimate1465/nodemain:v1.0' : 'ultimate1465/nodedev:v1.0'}"
+        CONTAINER = "${env.BRANCH_NAME == 'main' ? 'nodemain'                   : 'nodedev'}"
+        HOST_PORT = "${env.BRANCH_NAME == 'main' ? '3000'                       : '3001'}"
     }
 
     stages {
-
         stage('Lint Dockerfile') {
             agent any
             steps {
@@ -47,13 +46,24 @@ pipeline {
             }
         }
 
-        stage('Deploy') {
+        stage('Push to Docker Hub') {
             agent any
             steps {
-                sh """
-                    docker rm -f ${CONTAINER} || true
-                    docker run -d --name ${CONTAINER} --expose ${HOST_PORT} -p ${HOST_PORT}:3000 ${IMAGE}
-                """
+                withCredentials([usernamePassword(credentialsId: 'dockerhub',
+                                 usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
+                    sh 'echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin'
+                    sh "docker push ${IMAGE}"
+                }
+            }
+        }
+
+        stage('Trigger deploy') {
+            agent any
+            steps {
+                script {
+                    def deployJob = (env.BRANCH_NAME == 'main') ? 'Deploy_to_main' : 'Deploy_to_dev'
+                    build job: deployJob, wait: false
+                }
             }
         }
     }
